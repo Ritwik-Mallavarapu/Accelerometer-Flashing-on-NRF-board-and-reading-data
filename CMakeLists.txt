@@ -1,0 +1,12 @@
+# Tyre sensor firmware - nRF52810 + MMA8452Q
+# Save this file as:  C:\ncs\projects\tyre_sensor\CMakeLists.txt
+
+cmake_minimum_required(VERSION 3.20.0)
+
+find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
+
+project(tyre_sensor)
+
+target_sources(app PRIVATE
+    src/main.c
+)
