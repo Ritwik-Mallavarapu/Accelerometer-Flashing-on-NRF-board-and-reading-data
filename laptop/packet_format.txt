@@ -1,0 +1,90 @@
+TYRE_SENSOR — Bluetooth packet format
+=====================================
+
+This file is the contract between the nRF52810 firmware and the laptop
+Python receiver. Both sides must match it exactly.
+
+BLE identity
+------------
+Device name : TYRE_SENSOR
+Service     : 6b1f0001-7a3c-4d2e-9f10-8a5c1e200001   (custom)
+Characteristic (notify):
+              6b1f0002-7a3c-4d2e-9f10-8a5c1e200002   (custom)
+
+
+Packet layout
+-------------
+One BLE notification carries ONE packet. All multi-byte numbers are
+LITTLE-ENDIAN (least significant byte first). This matches the byte
+order of the nRF52810 and of Python's struct module on x86.
+
+  Offset   Size    Type      Field
+  ------   -----   -------   ----------------------------------------
+  0        2       uint16    sequence   packet counter, wraps at 65535
+  2        2       uint16    count      number of samples in this packet
+  4        6 x N   int16     samples    count x (X, Y, Z) raw counts
+
+  Each sample is 6 bytes: X (2) + Y (2) + Z (2), as SIGNED int16.
+
+
+Concrete numbers
+----------------
+Samples per packet : 20
+Bytes per sample   : 6
+Header             : 4 bytes
+Packet size        : 4 + (20 x 6) = 124 bytes
+
+Sampling rate      : 200 Hz  (one sample every 5 ms)
+Notify rate        : 10 Hz   (one packet every 100 ms)
+
+
+Raw counts -> g
+---------------
+The sensor is configured for +/-8 g.
+
+  Sensitivity at +/-8 g  =  256 counts per g
+
+  acceleration_g  =  raw_counts / 256.0
+
+Examples (from the MMA8452Q datasheet):
+
+  raw  X =  256   ->   X = 1.0 g
+  raw  Y = -128   ->   Y = -0.5 g
+  raw  Z =  512   ->   Z = 2.0 g
+
+Expected when the board lies flat and still:
+  one axis near +/-256 counts (about +/-1 g, gravity)
+  the other two near 0 counts
+  magnitude sqrt(X^2 + Y^2 + Z^2) near 1.0 g
+
+
+Decoding in Python (reference)
+------------------------------
+import struct
+
+# payload is a bytes object of length 124
+seq, count = struct.unpack_from("<HH", payload, 0)
+offset = 4
+for i in range(count):
+    x, y, z = struct.unpack_from("<hhh", payload, offset)
+    offset += 6
+    # x, y, z are raw signed 16-bit counts
+    x_g, y_g, z_g = x / 256.0, y / 256.0, z / 256.0
+
+"<HH"  = little-endian, two unsigned 16-bit
+"<hhh" = little-endian, three SIGNED 16-bit
+
+
+Saturation note
+---------------
++/-8 g means the raw value is clamped near +/-2048 counts.
+If a reading sits pinned at about that value while the wheel spins,
+the sensor is saturated and the measurement is lost. Watch for it.
+
+
+Units used in the CSV
+---------------------
+time_s   : seconds since the first packet arrived on the laptop
+seq      : packet sequence number from the firmware
+n        : sample index inside the packet (0..count-1)
+x_g/y_g/z_g : acceleration in g, already divided by 256
