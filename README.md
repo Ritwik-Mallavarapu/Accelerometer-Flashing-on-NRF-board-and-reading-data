@@ -1,0 +1,1 @@
+# Accelerometer-Flashing-on-NRF-board-and-reading-data
